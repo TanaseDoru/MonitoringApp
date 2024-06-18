@@ -45,3 +45,9 @@ void display_scrollable_output(const char *command) {
 
     delwin(win);
 }
+
+void display_button_to_quit(int line)
+{
+    mvprintw(line, 0, "Press 'q' to exit.");
+    refresh();
+}
