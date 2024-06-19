@@ -9,6 +9,11 @@
                 "-o",
                 "main",
                 "main.c",
+                "processHandler.c",
+                "setup.c",
+                "menuHandler.c",
+                "showSpecs.c",
+                "utils.c",
                 "-lncurses"
             ],
             "group": {

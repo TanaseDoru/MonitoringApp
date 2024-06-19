@@ -1,8 +1,8 @@
 #include "showSpecs.h"
 #include "utils.h"
-#define HEIGHT 5
-#define MENU_WIDTH 20
-#define WIDTH 10
+#define HEIGHT 30
+#define MENU_WIDTH 15
+#define WIDTH 100    
 #define MENU_OPTIONS 3
 
 void init_windows(WINDOW **menu_win, WINDOW **detail_win) {
@@ -42,14 +42,72 @@ void display_menu_specs(WINDOW *menu_win, int highlight) {
     wrefresh(menu_win);
 }
 
+void display_summary(WINDOW *detail_win)
+{
+    char buffer[1024];
+    int y=1;
+    mvwprintw(detail_win, y, 2, "Model of CPU: ");
+    y++;
+    FILE* fp;
+    fp = popen("grep -m 1 'model name' /proc/cpuinfo | tr -s \" \" | cut -f3- -d\" \"", "r");
+    while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+        mvwprintw(detail_win, y++, 4, "%s", buffer);
+    }
+    pclose(fp);
+    y++;
+    mvwprintw(detail_win, y, 2, "Memory RAM: ");
+    y++;
+    fp = popen("free -h --si | tr -s \" \" | cut -f1-2 -d\" \" | tail -2", "r");
+    if (handleErrorCommand(fp, detail_win))
+        return;
+    while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+        mvwprintw(detail_win, y++, 4, "%s", buffer);
+    }
+    pclose(fp);
+    y++;
+
+    mvwprintw(detail_win, y, 2, "Graphics Card(s): ");
+    y++;
+    fp = popen("lspci | egrep \"VGA|3D\" | cut -f2- -d\" \" | grep -Eo \": .+\" | cut -f2- -d' '", "r");
+    if (handleErrorCommand(fp, detail_win))
+        return;
+
+    while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+        mvwprintw(detail_win, y++, 4, "%s", buffer);
+    }
+    pclose(fp);
+    y++;
+    mvwprintw(detail_win, y, 2, "Storage: ");
+    y++;
+    fp = popen("lsblk -o NAME,SIZE,MODEL", "r");
+    if (handleErrorCommand(fp, detail_win))
+        return;
+    fgets(buffer, sizeof(buffer), fp);
+    mvwprintw(detail_win, y++, 4, "%s", buffer);
+    while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+        if (buffer[0] == 's')
+            mvwprintw(detail_win, y++, 4, "%s", buffer);
+    }
+    pclose(fp);
+    y++;
+    mvwprintw(detail_win, y, 2, "Audio: ");
+    y++;
+    fp = popen("lspci | grep -i audio | grep -Eo \": .+\" | cut -f2- -d\" \"", "r");
+    if (handleErrorCommand(fp, detail_win))
+        return;
+    while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+        mvwprintw(detail_win, y++, 4, "%s", buffer);
+    }
+    pclose(fp);
+
+}
+
 void display_details(WINDOW *detail_win, int highlight) {
     werase(detail_win);
-    box(detail_win, 0, 0);
 
-    // Print details based on selected menu option
     switch (highlight) {
         case 0: // Summary
-            mvwprintw(detail_win, 1, 2, "Summary: System overview");
+            display_summary(detail_win);
             break;
         case 1: // CPU
             mvwprintw(detail_win, 1, 2, "CPU details: Processor information");
@@ -58,7 +116,7 @@ void display_details(WINDOW *detail_win, int highlight) {
             mvwprintw(detail_win, 1, 2, "Memory details: RAM usage");
             break;
     }
-
+    box(detail_win, 0, 0);
     wrefresh(detail_win);
 }
 
@@ -75,7 +133,7 @@ void show_specs() {
     while (1) {
         display_menu_specs(menu_win, highlight);
         display_details(detail_win, highlight);
-        display_button_to_quit(MENU_OPTIONS + 2);
+        display_button_to_quit(HEIGHT + 1);
 
         ch = wgetch(menu_win); // Get user input from menu window
 

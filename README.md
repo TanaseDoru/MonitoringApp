@@ -7,3 +7,6 @@ Commits: Basic Menu; Show Specs Initial
 Am scris un meniu prin care sa se poata selecta: componente HW si Procese actuale
 Am facut headere si fisiere separate pentru fiecare functionalitate
 Am facut un meniu adecvat pentru optiunea de "Show Specs" prin care se poate rula folosind tasta TAB
+# 19.06.2024
+Commits: Summary Done;
+Am terminat primul tab din meniul Show Specs, astfel incat sa afiseze niste detalii scurte despre componentele calculatorului

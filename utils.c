@@ -51,3 +51,15 @@ void display_button_to_quit(int line)
     mvprintw(line, 0, "Press 'q' to exit.");
     refresh();
 }
+
+int handleErrorCommand(FILE* fp, WINDOW *detail_win)
+{
+    if (fp == NULL) {
+            mvwprintw(detail_win, 1, 2, "Failed to run lsblk command.");
+            wrefresh(detail_win);
+            getch();
+            endwin();
+            return 1;
+        }
+    return 0;
+}
