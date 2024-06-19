@@ -40,7 +40,7 @@ void handle_menu()
                 else
                     ++highlight;
                 break;
-            case 10: // Enter key
+            case 10: // Enter
                 choice = highlight;
                 if (choice == 0) {
                     clear();

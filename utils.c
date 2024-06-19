@@ -3,7 +3,7 @@
 void display_scrollable_output(const char *command) {
     FILE *fp;
     char buffer[256];
-    int row, col;
+
     int ch;
     int y = 0;
     int max_y = 0;
