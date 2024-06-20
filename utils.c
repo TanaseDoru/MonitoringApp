@@ -1,5 +1,6 @@
 #include "utils.h"
 #include <ncurses.h>
+#include <string.h>
 void display_scrollable_output(const char *command) {
     FILE *fp;
     char buffer[256];
@@ -49,7 +50,6 @@ void display_scrollable_output(const char *command) {
 void display_button_to_quit(int line)
 {
     mvprintw(line, 0, "Press 'q' to exit.");
-    refresh();
 }
 
 int handleErrorCommand(FILE* fp, WINDOW *detail_win)
@@ -62,4 +62,15 @@ int handleErrorCommand(FILE* fp, WINDOW *detail_win)
             return 1;
         }
     return 0;
+}
+
+void print_terminal_too_small(int target_height, int target_width)
+{
+    clear();
+    int height, width;
+    getmaxyx(stdscr, height, width);
+    mvprintw(height/2 - 1, width/2 - strlen("Please se terminal size to:")/2, "Terminal too small.");
+    mvprintw(height/2, width/2 - strlen("Please se terminal size to:")/2, "Please se terminal size to:");
+    mvprintw(height/2 + 1, width/2 - strlen("Please se terminal size to:")/2, "%d, %d", target_height, target_width);
+    refresh();
 }
