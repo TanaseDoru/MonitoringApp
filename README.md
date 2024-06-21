@@ -22,3 +22,9 @@ Am afisat date despre procese si anume: State, PID, PPID, Owner, CMD
 Am facut 2 ecrane: Cel de sus pentru detalii, iar cel de jos pentru procesele efective
 Procesle pot fi evidentiate, mai tarziu putand fi omorate
 Am mai adaugat o functionalitate prin care terminalul trebuie sa aiba o anumita marime pentru ca utilizatorul sa poata interactiona cu aplicatia.
+
+# 21.06.2024
+Commits: Processes efficient
+Am eficientizat monitorizarea proceselor si extragerea acestora din fisiere folosind threads
+De acum toate procesele sunt stocate intr-o clasa, care se actualizeaza la minim 2 secunde, dupa ce se apasa o tasta
+
