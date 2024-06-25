@@ -270,7 +270,7 @@ void show_specs() {
     while (1) {
         display_menu_specs(menu_win, highlight);
         display_details(detail_win, highlight, start_index, dataHW);
-        display_button_to_quit(HEIGHT + 1);
+        display_button_to_quit(stdscr ,HEIGHT + 1);
         display_tutorial(HEIGHT+2);
         refresh();
 

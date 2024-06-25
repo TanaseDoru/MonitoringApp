@@ -21,6 +21,7 @@
 #define MAX_PROCESSES 300
 #define MAX_THREADS 4
 #define BUFFER_SIZE 1024
+#define HEIGHT_OPT 8
 
 int nr_processes = 0;
 
@@ -40,6 +41,15 @@ typedef struct {
     int start;
     int end;
 } ThreadData;
+
+typedef struct {
+    double total_cpu_usage;
+    struct sysinfo sys_info;
+    char current_time[64];
+    double load_avg[3];
+    unsigned long used_ram, total_ram;
+    unsigned long used_swap, total_swap;
+}SummaryData;
 
 typedef enum {
     None,
@@ -155,7 +165,7 @@ void get_process_by_pid(char* pid, Process* current_proc) {
             if (uptime_file != NULL) {
                 fscanf(uptime_file, "%lf", &uptime);
                 fclose(uptime_file);
-            } else {
+            } else { 
                 uptime = sys_info.uptime;
             }
 
@@ -186,7 +196,8 @@ void* process_range(void* arg) {
 }
 
 void get_processes(Process* proc) {
-    DIR* proc_dir = opendir("/proc");
+    
+    DIR* proc_dir = opendir("/proc"); 
     struct dirent* entry;
     char* pid_list[MAX_PROCESSES];
     int proc_count = 0;
@@ -203,7 +214,6 @@ void get_processes(Process* proc) {
             if (proc_count >= MAX_PROCESSES) break;
         }
     }
-
     closedir(proc_dir);
     nr_processes = proc_count;
 
@@ -286,18 +296,20 @@ double calculate_cpu_usage(CpuTimes* prev, CpuTimes* curr) {
 }
 
 void get_cpu_times(CpuTimes* times) {
-    FILE* fp = fopen("/proc/stat", "r");
-    if (fp == NULL) {
-        perror("fopen");
-        exit(EXIT_FAILURE);
-    }
+    FILE * fp = fopen("/proc/stat", "r");
 
+    if (fp == NULL) {
+    return;
+    }
+    
     char buffer[256];
-    fgets(buffer, sizeof(buffer), fp);
-    sscanf(buffer, "cpu %llu %llu %llu %llu %llu %llu %llu %llu",
-           &times->user, &times->nice, &times->system, &times->idle,
-           &times->iowait, &times->irq, &times->softirq, &times->steal);
+    fgets(buffer, sizeof(buffer), fp) == NULL;
     fclose(fp);
+    sscanf(buffer, "cpu %llu %llu %llu %llu %llu %llu %llu %llu\n",
+        &times->user, &times->nice, &times->system, &times->idle,
+        &times->iowait, &times->irq, &times->softirq, &times->steal);
+        
+    
 }
 
 void get_system_info(struct sysinfo* sys_info) {
@@ -307,7 +319,6 @@ void get_system_info(struct sysinfo* sys_info) {
     }
 }
 
-// Function to get the current time as a formatted string
 void get_current_time(char* buffer, size_t size) {
     time_t rawtime;
     struct tm* timeinfo;
@@ -316,7 +327,6 @@ void get_current_time(char* buffer, size_t size) {
     strftime(buffer, size, "%Y-%m-%d %H:%M:%S", timeinfo);
 }
 
-// Function to get the load average
 void get_load_average(double* load_avg) {
     if (getloadavg(load_avg, 3) == -1) {
         perror("getloadavg");
@@ -324,66 +334,63 @@ void get_load_average(double* load_avg) {
     }
 }
 
-// Function to get memory usage
 void get_memory_usage(struct sysinfo* sys_info, unsigned long* used_ram, unsigned long* total_ram) {
     *total_ram = sys_info->totalram / 1024;
     *used_ram = (*total_ram) - (sys_info->freeram / 1024);
 }
 
-// Function to get swap usage
 void get_swap_usage(struct sysinfo* sys_info, unsigned long* used_swap, unsigned long* total_swap) {
     *total_swap = sys_info->totalswap / 1024;
     *used_swap = (*total_swap) - (sys_info->freeswap / 1024);
 }
 
-void show_summary(WINDOW* top_win, CpuTimes* prev_cpu_times) {
-    struct sysinfo sys_info;
-    get_system_info(&sys_info);
+void get_summary(WINDOW* top_win, CpuTimes* prev_cpu_times, SummaryData* s) {
+    get_system_info(&s->sys_info);
 
-    char current_time[64];
-    get_current_time(current_time, sizeof(current_time));
+    get_current_time(s->current_time, sizeof(s->current_time));
 
-    double load_avg[3];
-    get_load_average(load_avg);
+    get_load_average(s->load_avg);
 
-    unsigned long used_ram, total_ram;
-    get_memory_usage(&sys_info, &used_ram, &total_ram);
+    get_memory_usage(&s->sys_info, &s->used_ram, &s->total_ram);
 
-    unsigned long used_swap, total_swap;
-    get_swap_usage(&sys_info, &used_swap, &total_swap);
+    get_swap_usage(&s->sys_info, &s->used_swap, &s->total_swap);
 
     CpuTimes curr_cpu_times;
     get_cpu_times(&curr_cpu_times);
-    double total_cpu_usage = calculate_cpu_usage(prev_cpu_times, &curr_cpu_times);
-
-    // Update previous CPU times
+    s->total_cpu_usage = calculate_cpu_usage(prev_cpu_times, &curr_cpu_times);
+    
     *prev_cpu_times = curr_cpu_times;
-
-    // Display information in the window
-    werase(top_win);
-    box(top_win, 0, 0);
-    mvwprintw(top_win, 1, 1, "Uptime: %ld days, %ld:%02ld:%02ld", 
-              sys_info.uptime / 86400, (sys_info.uptime % 86400) / 3600, 
-              (sys_info.uptime % 3600) / 60, sys_info.uptime % 60);
-    mvwprintw(top_win, 2, 1, "Current time: %s", current_time);
-    mvwprintw(top_win, 3, 1, "Load average: %.2f, %.2f, %.2f", 
-              load_avg[0], load_avg[1], load_avg[2]);
-    mvwprintw(top_win, 4, 1, "Total CPU usage: %.2f%%", total_cpu_usage);
-    mvwprintw(top_win, 5, 1, "Memory usage: %lu KB / %lu KB", 
-              used_ram, total_ram);
-    mvwprintw(top_win, 6, 1, "Swap usage: %lu KB / %lu KB", 
-              used_swap, total_swap);
-    wrefresh(top_win);
+    
 }
 
-void init_window(WINDOW** top_win, WINDOW** proc_win) {
+void display_summary_top(WINDOW* top_win, SummaryData s)
+{
+    box(top_win, 0, 0);
+    mvwprintw(top_win, 1, 1, "Uptime: %ld days, %ld:%02ld:%02ld", 
+              s.sys_info.uptime / 86400, (s.sys_info.uptime % 86400) / 3600, 
+              (s.sys_info.uptime % 3600) / 60, s.sys_info.uptime % 60);
+    mvwprintw(top_win, 2, 1, "Current time: %s", s.current_time);
+    mvwprintw(top_win, 3, 1, "Load average: %.2f, %.2f, %.2f", 
+              s.load_avg[0], s.load_avg[1], s.load_avg[2]);
+    mvwprintw(top_win, 4, 1, "Total CPU usage: %.2f%%", s.total_cpu_usage);
+    mvwprintw(top_win, 5, 1, "Memory usage: %lu KB / %lu KB", 
+              s.used_ram, s.total_ram);
+    mvwprintw(top_win, 6, 1, "Swap usage: %lu KB / %lu KB", 
+              s.used_swap, s.total_swap);
+}
+
+void init_window(WINDOW** top_win, WINDOW** proc_win, WINDOW** options_win) {
     *top_win = newwin(HEIGHT_TOP, WIDTH, 0, 0);
     box(*top_win, 0, 0);
     wrefresh(*top_win);
 
+
     *proc_win = newwin(HEIGHT_PROC, WIDTH, HEIGHT_TOP, 0);
     box(*proc_win, 0, 0);
     wrefresh(*proc_win);
+
+    *options_win = newwin(HEIGHT_OPT, WIDTH, HEIGHT_TOP + HEIGHT_PROC, 0);
+
     refresh();
 }
 
@@ -393,21 +400,37 @@ void change_nice_value(int pid, int inc)
     setpriority(PRIO_PROCESS, pid, priority + inc);
 }
 
-void show_tutorial_commands(int line)
+void show_tutorial_commands(WINDOW* win, int line)
 {
-    mvprintw(line, 0, "F1 Help     F2 Sort By     F3 Nice-     F4 Nice+     F5 Kill");
+    mvwprintw(win, line, 0, "F1 Help     F2 Sort By     F3 Nice-     F4 Nice+     F5 Kill");
 }
 
-void show_sorting_options(int line)
+void show_sorting_options(WINDOW* win, int line)
 {
-    mvprintw(line, 0, "F1 Pid     F2 PPid     F3 User     F4 State     Esc Back");
+    mvwprintw(win, line, 0, "F1 Pid     F2 PPid     F3 User     F4 State     Esc Back");
+}
+
+int terminate_process(pid_t pid) {
+    if (kill(pid, SIGKILL) == 0) {
+        return 0; 
+    } else {
+        return 1;
+    }
+}
+
+void display_search(WINDOW* win, char * buffer, int line)
+{
+    mvwprintw(win, line, 0, "Search: ");
+    mvwprintw(win, line, strlen("Search: "), "%s", buffer);
 }
 
 void monitor_processes() {
-    WINDOW* top_win, * proc_win;
-    init_window(&top_win, &proc_win);
+    WINDOW* top_win, * proc_win, *options_win;
+    init_window(&top_win, &proc_win, &options_win);
     int height, width;
     int ch;
+    char search_buffer[256]="";
+    int index_sbuffer=0;
     int start_index = 0;
     int highlight = 0;
     sorting_state ss = None;
@@ -415,42 +438,54 @@ void monitor_processes() {
     time_t current_time;
     time_t timer_time = time(0);
     CpuTimes prev_cpu_times;
-    get_cpu_times(&prev_cpu_times);
+    SummaryData sumData;
     wclear(proc_win);
     get_processes(processes);
+    get_summary(top_win, &prev_cpu_times, &sumData);
     int current_option=0;
 
     while (1) {
         getmaxyx(stdscr, height, width);
-        if (height < (HEIGHT_PROC + HEIGHT_TOP + 1) || width < WIDTH) {
-            print_terminal_too_small(HEIGHT_PROC + HEIGHT_TOP + 2, WIDTH);
+        if (height < (HEIGHT_PROC + HEIGHT_TOP + HEIGHT_OPT) || width < WIDTH) {
+            print_terminal_too_small(HEIGHT_PROC + HEIGHT_TOP + HEIGHT_OPT, WIDTH);
             refresh();
             getch();
             clear();
             continue;
         }
         current_time = time(0);
-        if (difftime(current_time, timer_time) >= 2.0) {
+        if (difftime(current_time, timer_time) >= 2.5) {
             timer_time = current_time;
             get_processes(processes);
+            get_summary(top_win, &prev_cpu_times, &sumData);
         }
         clear();
         refresh();
+        wclear(options_win);
         wclear(proc_win);
-        show_summary(top_win, &prev_cpu_times);
+        wclear(top_win);
+        wrefresh(options_win);
+        wrefresh(proc_win);
+        wrefresh(top_win);
         display_processes_info(proc_win, start_index, highlight, processes, ss);
-        display_button_to_quit(HEIGHT_PROC + HEIGHT_TOP + 1);
+        display_summary_top(top_win, sumData);
+        display_button_to_quit(options_win, 2);
+        display_search(options_win, search_buffer, 1);
         switch (current_option)
         {
         case 0:
-            show_tutorial_commands(HEIGHT_PROC + HEIGHT_TOP);
+            show_tutorial_commands(options_win, 0);
             break;
         case 1:
-            show_sorting_options(HEIGHT_PROC + HEIGHT_TOP);
+            show_sorting_options(options_win, 0);
             break;
         default:
             break;
         }
+        
+        wrefresh(proc_win);
+        wrefresh(options_win);
+        wrefresh(top_win);
         refresh();
 
         ch = getch();
@@ -530,7 +565,7 @@ void monitor_processes() {
         }
         else if (current_option == 0)
         {
-
+            terminate_process(processes[start_index + highlight].pid);
         }
         break;
         case KEY_F(6):
@@ -545,7 +580,19 @@ void monitor_processes() {
                 current_option = 0;
             }
             break;
-            
+        case KEY_BACKSPACE:
+            if(index_sbuffer > 0)
+            {
+                search_buffer[--index_sbuffer] = '\0';
+            }
+            break;
+        default:
+            if(index_sbuffer < 255)
+            {
+                search_buffer[index_sbuffer++] = ch;
+                search_buffer[index_sbuffer] = '\0';
+            }
+        break;   
         }
     }
 }

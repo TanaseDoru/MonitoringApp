@@ -47,9 +47,9 @@ void display_scrollable_output(const char *command) {
     delwin(win);
 }
 
-void display_button_to_quit(int line)
+void display_button_to_quit(WINDOW* opt_win, int line)
 {
-    mvprintw(line, 0, "Press 'q' to exit.");
+    mvwprintw(opt_win, line, 0, "Press 'q' to exit.");
 }
 
 int handleErrorCommand(FILE* fp, WINDOW *detail_win)
@@ -69,8 +69,8 @@ void print_terminal_too_small(int target_height, int target_width)
     clear();
     int height, width;
     getmaxyx(stdscr, height, width);
-    mvprintw(height/2 - 1, width/2 - strlen("Please se terminal size to:")/2, "Terminal too small.");
-    mvprintw(height/2, width/2 - strlen("Please se terminal size to:")/2, "Please se terminal size to:");
-    mvprintw(height/2 + 1, width/2 - strlen("Please se terminal size to:")/2, "%d, %d", target_height, target_width);
+    mvprintw(height/2 - 1, width/2 - strlen("Please set terminal size to:")/2, "Terminal too small.");
+    mvprintw(height/2, width/2 - strlen("Please set terminal size to:")/2, "Please set terminal size to:");
+    mvprintw(height/2 + 1, width/2 - strlen("Please set terminal size to:")/2, "%d, %d", target_height, target_width);
     refresh();
 }
