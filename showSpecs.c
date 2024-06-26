@@ -256,10 +256,19 @@ void display_tutorial(int y)
     mvprintw(y, 0, "Press TAB to shuffle through menus");
 }
 
+void _resize_windows(WINDOW* menu_win, WINDOW* specs_win)
+{
+    wresize(menu_win, HEIGHT, MENU_WIDTH);
+    wresize(specs_win, HEIGHT, WIDTH);
+    mvwin(menu_win, 0, 0);
+    mvwin(specs_win, 0, MENU_WIDTH);
+}
+
 void show_specs() {
         WINDOW *menu_win, *detail_win;
     int highlight = 0;
     int start_index=0;
+    int height, width;
     int ch;
     data dataHW;
 
@@ -268,6 +277,15 @@ void show_specs() {
     init_data(&dataHW);
     // Main loop
     while (1) {
+        getmaxyx(stdscr, height, width);
+        if (height < (HEIGHT + 3) || width < WIDTH + MENU_WIDTH) {
+            print_terminal_too_small(HEIGHT + 3, WIDTH + MENU_WIDTH);
+            refresh();
+            getch();
+            clear();
+            continue;
+        }
+        _resize_windows(menu_win, detail_win);
         display_menu_specs(menu_win, highlight);
         display_details(detail_win, highlight, start_index, dataHW);
         display_button_to_quit(stdscr ,HEIGHT + 1);
@@ -291,6 +309,11 @@ no_important_key_pressed:
                 break;
             case 'q': // 'q' to quit
                 return;
+            case KEY_RESIZE:
+                getmaxyx(stdscr, height, width);
+                refresh();
+                if (height < (HEIGHT + 3) || width < WIDTH + MENU_WIDTH) { continue; }
+                break;
             default:
                 goto no_important_key_pressed;
         }

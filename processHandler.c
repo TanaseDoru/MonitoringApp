@@ -15,10 +15,10 @@
 #include <pwd.h>
 #include <pthread.h>
 
-#define WIDTH 80
-#define HEIGHT_TOP 10
+#define WIDTH 90
+#define HEIGHT_TOP 9
 #define HEIGHT_PROC 30
-#define MAX_PROCESSES 300
+#define MAX_PROCESSES 400
 #define MAX_THREADS 4
 #define BUFFER_SIZE 1024
 #define HEIGHT_OPT 8
@@ -33,6 +33,7 @@ typedef struct {
     char name[BUFFER_SIZE];
     int nice;
     float cpu_usage;
+    char args[BUFFER_SIZE];
 } Process;
 
 typedef struct {
@@ -53,10 +54,14 @@ typedef struct {
 
 typedef enum {
     None,
-    Pid,
+    Pid=1,
     PPid,
     User,
-    State
+    Nice,
+    Pid_desc=-1,
+    PPid_desc=-2,
+    User_desc=-3,
+    Nice_desc=-4
 }sorting_state;
 
 typedef struct {
@@ -75,12 +80,32 @@ int compare_by_user(const void* a, const void* b) {
     return strcmp(((Process*)a)->user, ((Process*)b)->user);
 }
 
-int compare_by_state(const void* a, const void* b) {
-    return ((Process*)a)->state - ((Process*)b)->state;
+int compare_by_nice(const void* a, const void* b) {
+    return ((Process*)a)->nice - ((Process*)b)->nice;
 }
 
 int compare_by_name(const void* a, const void* b) {
     return strcmp(((Process*)a)->name, ((Process*)b)->name);
+}
+
+int compare_by_pid_desc(const void* a, const void* b) {
+    return -((Process*)a)->pid + ((Process*)b)->pid;
+}
+
+int compare_by_ppid_desc(const void* a, const void* b) {
+    return -((Process*)a)->ppid + ((Process*)b)->ppid;
+}
+
+int compare_by_user_desc(const void* a, const void* b) {
+    return -strcmp(((Process*)a)->user, ((Process*)b)->user);
+}
+
+int compare_by_nice_desc(const void* a, const void* b) {
+    return -((Process*)a)->nice + ((Process*)b)->nice;
+}
+
+int compare_by_name_desc(const void* a, const void* b) {
+    return -strcmp(((Process*)a)->name, ((Process*)b)->name);
 }
 
 int is_number(const char* buffer) {
@@ -133,6 +158,18 @@ void get_process_by_pid(char* pid, Process* current_proc) {
 
     fclose(f);
 
+    snprintf(filename, sizeof(filename), "/proc/%s/cmdline", pid);
+    f = fopen(filename, "r");
+    if (!f) return;
+
+    strcpy(buffer, "");
+
+    if (fread(buffer, sizeof(char), sizeof(buffer), f))
+    {
+        strcpy(current_proc->args, buffer);
+    }
+
+    fclose(f);
 
     snprintf(filename, sizeof(filename), "/proc/%s/stat", pid);
     f = fopen(filename, "r");
@@ -141,21 +178,21 @@ void get_process_by_pid(char* pid, Process* current_proc) {
     unsigned long utime, stime, starttime;
     long nice;
 
-     // Variablie temporale ca dadea warning pentru *
-    int temp_int;
-    unsigned int temp_uint;
-    long temp_long;
-    unsigned long temp_ulong;
-    char temp_char;
-    char* temp_pchar;
-
     if (fgets(buffer, sizeof(buffer), f) != NULL) {
+        int pid;
+        char comm[256];
+        char state;
+        int ppid, pgrp, session, tty_nr, tpgid;
+        unsigned flags;
+        unsigned long minflt, cminflt, majflt, cmajflt, vsize;
+        long cutime, cstime, priority, num_threads, itrealvalue, rss;
+
         sscanf(buffer,
-               "%d %s %c %d %d %d %d %d %u %u %u %u %u %lu %lu %ld %ld %ld %ld %ld %lu",
-               &temp_int, temp_pchar, &temp_char, &temp_int, &temp_int, &temp_int, &temp_int,
-               &temp_int, &temp_uint, &temp_uint, &temp_uint, &temp_uint, &temp_uint, 
-               &utime, &stime, &nice, &temp_long, &temp_long, &temp_long, &temp_long, 
-               &starttime);
+           "%d %s %c %d %d %d %d %d %u %lu %lu %lu %lu %lu %lu %ld %ld %ld %ld %ld %ld %ld %lu",
+           &pid, comm, &state, &ppid, &pgrp, &session, &tty_nr, &tpgid, &flags,
+           &minflt, &cminflt, &majflt, &cmajflt, &utime, &stime, &cutime, &cstime,
+           &priority, &nice, &num_threads, &itrealvalue, &starttime, &vsize);
+
         current_proc->nice = (int)nice;
 
         struct sysinfo sys_info;
@@ -164,7 +201,7 @@ void get_process_by_pid(char* pid, Process* current_proc) {
             FILE *uptime_file = fopen("/proc/uptime", "r");
             if (uptime_file != NULL) {
                 fscanf(uptime_file, "%lf", &uptime);
-                fclose(uptime_file);
+                fclose(uptime_file); // Ensure file is closed
             } else { 
                 uptime = sys_info.uptime;
             }
@@ -173,12 +210,14 @@ void get_process_by_pid(char* pid, Process* current_proc) {
             double total_time = (utime + stime) / (double)clk_tck;
             double seconds = uptime - (starttime / (double)clk_tck);
             if (seconds > 0) {
-                current_proc->cpu_usage = 100 * (total_time / seconds);
+                current_proc->cpu_usage = 100.0 * (total_time / seconds);
             } else {
                 current_proc->cpu_usage = 0.0;
             }
         }
     }
+
+    fclose(f);
 }
 
 void* process_range(void* arg) {
@@ -241,7 +280,8 @@ void get_processes(Process* proc) {
     }
 }
 
-void display_processes_info(WINDOW* proc_win, int start_index, int highlight, Process* proc, sorting_state ss) {
+void display_processes_info(WINDOW* proc_win, int start_index, int highlight, Process* proc, sorting_state ss, char* search_buffer, int* display_count, 
+                            int* selected_pid, int right_pressed) {
     
     switch (ss)
     {
@@ -251,33 +291,86 @@ void display_processes_info(WINDOW* proc_win, int start_index, int highlight, Pr
         case PPid:
             qsort(proc, nr_processes, sizeof(Process), compare_by_ppid);
         break;
-        case State:
-            qsort(proc, nr_processes, sizeof(Process), compare_by_state);
+        case Nice:
+            qsort(proc, nr_processes, sizeof(Process), compare_by_nice);
         break;
         case User:
             qsort(proc, nr_processes, sizeof(Process), compare_by_user);
         break;  
+        case Pid_desc:
+            qsort(proc, nr_processes, sizeof(Process), compare_by_pid_desc);
+        break;
+        case PPid_desc:
+            qsort(proc, nr_processes, sizeof(Process), compare_by_ppid_desc);
+        break;
+        case Nice_desc:
+            qsort(proc, nr_processes, sizeof(Process), compare_by_nice_desc);
+        break;
+        case User_desc:
+            qsort(proc, nr_processes, sizeof(Process), compare_by_user_desc);
+        break;  
         default:
         break;
     }
-    
+
+
     char buffer[BUFFER_SIZE];
-    mvwprintw(proc_win, 1, 2, "S\tOwner\tPID\tPPID\tNice\tCPU\tCMD");
+    if(right_pressed)
+    {
+        mvwprintw(proc_win, 1, 2, "CMD\t\t\t\tARGS");
+    }
+    else
+    {
+        mvwprintw(proc_win, 1, 2, "S\tOwner\tPID\tPPID\tNice\tCPU\tCMD");
+    }
+
+    *display_count = 0;
     int current_process = start_index;
-    for (int i = 0; i < HEIGHT_PROC - 3; i++) {
-        if (current_process >= nr_processes) break;
-        if (i == highlight)
-            wattron(proc_win, A_REVERSE);
-        mvwprintw(proc_win, i + 2, 2, "%c\t%s\t%d\t%d\t%d\t%.1f\t%s", proc[current_process].state, 
-        proc[current_process].user, proc[current_process].pid, proc[current_process].ppid, proc[current_process].nice, proc[current_process].cpu_usage,
-        proc[current_process].name);
-        if (i == highlight)
-            wattroff(proc_win, A_REVERSE);
+
+    for (int i = 0; i < nr_processes; i++) {
+        if (*display_count >= HEIGHT_PROC - 3) break;
+
+        if (strcmp(search_buffer, "") == 0 || 
+            strstr(proc[current_process].name, search_buffer) != NULL ||
+            strstr(proc[current_process].user, search_buffer) != NULL ||
+            strstr(proc[current_process].args, search_buffer) != NULL) {
+            
+            if (*display_count == highlight)
+                {
+                    wattron(proc_win, A_REVERSE);
+                    *selected_pid = proc[current_process].pid;
+                }
+
+            if(right_pressed)
+            {
+                mvwprintw(proc_win, *display_count + 2, 2, "%26s\t%s", 
+                    proc[current_process].name, 
+                    proc[current_process].args);
+            }
+            else
+            {
+                mvwprintw(proc_win, *display_count + 2, 2, "%c\t%s\t%d\t%d\t%d\t%.2f\t%s", 
+                    proc[current_process].state, 
+                    proc[current_process].user, 
+                    proc[current_process].pid, 
+                    proc[current_process].ppid, 
+                    proc[current_process].nice, 
+                    proc[current_process].cpu_usage, 
+                    proc[current_process].name);
+            }
+            
+            
+            if (*display_count == highlight)
+                wattroff(proc_win, A_REVERSE);
+
+            (*display_count)++;
+        }
         current_process++;
     }
     box(proc_win, 0, 0);
     wrefresh(proc_win);
 }
+
 
 double calculate_cpu_usage(CpuTimes* prev, CpuTimes* curr) {
     unsigned long long prev_idle = prev->idle + prev->iowait;
@@ -299,23 +392,21 @@ void get_cpu_times(CpuTimes* times) {
     FILE * fp = fopen("/proc/stat", "r");
 
     if (fp == NULL) {
-    return;
+        return;
     }
     
     char buffer[256];
-    fgets(buffer, sizeof(buffer), fp) == NULL;
-    fclose(fp);
+    fgets(buffer, sizeof(buffer), fp);
+    fclose(fp); // Ensure file is closed
+
     sscanf(buffer, "cpu %llu %llu %llu %llu %llu %llu %llu %llu\n",
         &times->user, &times->nice, &times->system, &times->idle,
         &times->iowait, &times->irq, &times->softirq, &times->steal);
-        
-    
 }
 
 void get_system_info(struct sysinfo* sys_info) {
     if (sysinfo(sys_info) != 0) {
-        perror("sysinfo");
-        exit(EXIT_FAILURE);
+        return;
     }
 }
 
@@ -329,8 +420,7 @@ void get_current_time(char* buffer, size_t size) {
 
 void get_load_average(double* load_avg) {
     if (getloadavg(load_avg, 3) == -1) {
-        perror("getloadavg");
-        exit(EXIT_FAILURE);
+        return;
     }
 }
 
@@ -372,10 +462,11 @@ void display_summary_top(WINDOW* top_win, SummaryData s)
     mvwprintw(top_win, 2, 1, "Current time: %s", s.current_time);
     mvwprintw(top_win, 3, 1, "Load average: %.2f, %.2f, %.2f", 
               s.load_avg[0], s.load_avg[1], s.load_avg[2]);
-    mvwprintw(top_win, 4, 1, "Total CPU usage: %.2f%%", s.total_cpu_usage);
-    mvwprintw(top_win, 5, 1, "Memory usage: %lu KB / %lu KB", 
+    mvwprintw(top_win, 4, 1, "Total tasks: %d", nr_processes);
+    mvwprintw(top_win, 5, 1, "Total CPU usage: %.2f%%", s.total_cpu_usage);
+    mvwprintw(top_win, 6, 1, "Memory usage: %lu KB / %lu KB", 
               s.used_ram, s.total_ram);
-    mvwprintw(top_win, 6, 1, "Swap usage: %lu KB / %lu KB", 
+    mvwprintw(top_win, 7, 1, "Swap usage: %lu KB / %lu KB", 
               s.used_swap, s.total_swap);
 }
 
@@ -394,12 +485,6 @@ void init_window(WINDOW** top_win, WINDOW** proc_win, WINDOW** options_win) {
     refresh();
 }
 
-void change_nice_value(int pid, int inc)
-{
-    int priority = getpriority(PRIO_PROCESS, pid);
-    setpriority(PRIO_PROCESS, pid, priority + inc);
-}
-
 void show_tutorial_commands(WINDOW* win, int line)
 {
     mvwprintw(win, line, 0, "F1 Help     F2 Sort By     F3 Nice-     F4 Nice+     F5 Kill");
@@ -407,15 +492,44 @@ void show_tutorial_commands(WINDOW* win, int line)
 
 void show_sorting_options(WINDOW* win, int line)
 {
-    mvwprintw(win, line, 0, "F1 Pid     F2 PPid     F3 User     F4 State     Esc Back");
+    mvwprintw(win, line, 0, "F1 Pid     F2 PPid     F3 User     F4 Nice     Esc Back");
 }
 
-int terminate_process(pid_t pid) {
-    if (kill(pid, SIGKILL) == 0) {
-        return 0; 
-    } else {
-        return 1;
+void terminate_process(pid_t pid) {
+    char command[50];
+    snprintf(command, sizeof(command), "kill -9 %d", pid);
+
+    FILE *fp = popen(command, "r");
+    if (fp == NULL) {
+        return;
     }
+
+    pclose(fp);
+}
+
+void change_nice_value(pid_t pid, int increment) {
+    char command[100];
+    snprintf(command, sizeof(command), "ps -o ni= -p %d", pid);
+    FILE *fp = popen(command, "r");
+    if (fp == NULL) {
+        return;
+    }
+
+    int current_nice;
+    if (fscanf(fp, "%d", &current_nice) != 1) {
+        pclose(fp); 
+        return;
+    }
+    pclose(fp); 
+
+    int new_nice = current_nice + increment;
+
+    snprintf(command, sizeof(command), "renice %d -p %d", new_nice, pid);
+    fp = popen(command, "r");
+    if (fp == NULL) {
+        return;
+    }
+    pclose(fp); 
 }
 
 void display_search(WINDOW* win, char * buffer, int line)
@@ -424,12 +538,35 @@ void display_search(WINDOW* win, char * buffer, int line)
     mvwprintw(win, line, strlen("Search: "), "%s", buffer);
 }
 
+void resize_windows(WINDOW* top_win, WINDOW* proc_win, WINDOW* options_win)
+{
+    wresize(top_win, HEIGHT_TOP, WIDTH);
+    wresize(proc_win, HEIGHT_PROC, WIDTH);
+    wresize(options_win, HEIGHT_OPT, WIDTH);
+    mvwin(proc_win, HEIGHT_TOP, 0);
+    mvwin(options_win, HEIGHT_TOP + HEIGHT_PROC, 0);
+}
+
+void clear_refresh_windows(WINDOW* top_win, WINDOW* proc_win, WINDOW* options_win)
+{
+    clear();
+    refresh();
+    wclear(options_win);
+    wclear(proc_win);
+    wclear(top_win);
+    wrefresh(options_win);
+    wrefresh(proc_win);
+    wrefresh(top_win);
+}
+
 void monitor_processes() {
     WINDOW* top_win, * proc_win, *options_win;
     init_window(&top_win, &proc_win, &options_win);
     int height, width;
+    int right_pressed=0;
+    int selected_pid;
     int ch;
-    char search_buffer[256]="";
+    char search_buffer[50]="";
     int index_sbuffer=0;
     int start_index = 0;
     int highlight = 0;
@@ -439,10 +576,10 @@ void monitor_processes() {
     time_t timer_time = time(0);
     CpuTimes prev_cpu_times;
     SummaryData sumData;
-    wclear(proc_win);
+    int current_option=0;
+    int display_count;
     get_processes(processes);
     get_summary(top_win, &prev_cpu_times, &sumData);
-    int current_option=0;
 
     while (1) {
         getmaxyx(stdscr, height, width);
@@ -459,15 +596,13 @@ void monitor_processes() {
             get_processes(processes);
             get_summary(top_win, &prev_cpu_times, &sumData);
         }
-        clear();
-        refresh();
-        wclear(options_win);
-        wclear(proc_win);
-        wclear(top_win);
-        wrefresh(options_win);
-        wrefresh(proc_win);
-        wrefresh(top_win);
-        display_processes_info(proc_win, start_index, highlight, processes, ss);
+
+        
+        resize_windows(top_win, proc_win, options_win); //Resize deoarece in cazul in care terminalul nu era la dimensiunea corecta aparea un bug ciudat
+
+        clear_refresh_windows(top_win, proc_win, options_win);
+        
+        display_processes_info(proc_win, start_index, highlight, processes, ss, search_buffer, &display_count, &selected_pid, right_pressed);
         display_summary_top(top_win, sumData);
         display_button_to_quit(options_win, 2);
         display_search(options_win, search_buffer, 1);
@@ -492,10 +627,10 @@ void monitor_processes() {
 
         switch (ch) {
         case KEY_DOWN:
-            if (highlight < HEIGHT_PROC - 4 && highlight + start_index < nr_processes - 1) {
+            if (highlight < HEIGHT_PROC - 2 && highlight + start_index < nr_processes - 1 && highlight < display_count - 1) {
                 highlight++;
             }
-            else if (start_index < nr_processes - 1) {
+            else if (start_index < nr_processes - 1 - HEIGHT_PROC) {
                 start_index++;
             }
             break;
@@ -507,6 +642,12 @@ void monitor_processes() {
                 start_index--;
             }
             break;
+        case KEY_RIGHT:
+            right_pressed = 1;
+        break;
+        case KEY_LEFT:
+            right_pressed = 0;
+        break;
         case 'q': // 'q' to quit
             return;
         case KEY_RESIZE:
@@ -517,10 +658,20 @@ void monitor_processes() {
         case KEY_F(1):
         if (current_option == 1)
         {
-            ss = Pid;
-            qsort(processes, nr_processes, sizeof(Process), compare_by_pid);
-            
-
+            if(ss == Pid)
+            {
+                ss = Pid_desc;
+                qsort(processes, nr_processes, sizeof(Process), compare_by_pid_desc);
+            }
+            else if (ss == Pid_desc)
+            {
+                ss = None;
+            }
+            else
+            {
+                ss = Pid;
+                qsort(processes, nr_processes, sizeof(Process), compare_by_pid);
+            }
         }
         break;
         case KEY_F(2):
@@ -530,48 +681,77 @@ void monitor_processes() {
             }
             else if (current_option == 1)
             {
-                ss =PPid;
-                qsort(processes, nr_processes, sizeof(Process), compare_by_ppid);
+                if(ss == PPid)
+                {
+                    ss = PPid_desc;
+                    qsort(processes, nr_processes, sizeof(Process), compare_by_ppid_desc);
+                }
+                else if (ss == PPid_desc)
+                {
+                    ss = None;
+                }
+                else
+                {
+                    ss = PPid;
+                    qsort(processes, nr_processes, sizeof(Process), compare_by_ppid);
+                }
+                
             }
             break;
         case KEY_F(3):
         if (current_option == 1)
         {
-            ss = User;
-            qsort(processes, nr_processes, sizeof(Process), compare_by_user);
+            if(ss == User)
+            {
+                ss = User_desc;
+                qsort(processes, nr_processes, sizeof(Process), compare_by_user_desc);
+            }
+            else if (ss == User_desc)
+            {
+                ss = None;
+            }
+            else
+            {
+                ss = User;
+                qsort(processes, nr_processes, sizeof(Process), compare_by_user);
+            }
         }
         else if (current_option == 0)
         {
-            if (highlight + start_index < nr_processes)
-            change_nice_value(processes[highlight + start_index].pid, -1); // Decrease nice
+            change_nice_value(selected_pid, -1); // Decrease nice
         }
         break;
         case KEY_F(4):
         if (current_option == 1)
         {
-            ss = State;
-            qsort(processes, nr_processes, sizeof(Process), compare_by_state);
+            if(ss == Nice)
+            {
+                ss = Nice_desc;
+                qsort(processes, nr_processes, sizeof(Process), compare_by_nice_desc);
+            }
+            else if (ss == Nice_desc)
+            {
+                ss = None;
+            }
+            else
+            {
+                ss = Nice;
+                qsort(processes, nr_processes, sizeof(Process), compare_by_nice);
+            }
         }
         else if (current_option == 0)
         {
-            if (highlight + start_index < nr_processes)
-            change_nice_value(processes[highlight + start_index].pid, 1); // Decrease nice
+            change_nice_value(selected_pid, 1); // Increase nice
         }
         break;
         case KEY_F(5):
         if (current_option == 1)
         {
-            ;//qsort(processes, nr_processes, sizeof(Process), compare_by_pid);
+            ;
         }
         else if (current_option == 0)
         {
-            terminate_process(processes[start_index + highlight].pid);
-        }
-        break;
-        case KEY_F(6):
-        if (current_option == 1)
-        {
-            ;//qsort(processes, nr_processes, sizeof(Process), compare_by_pid);
+            terminate_process(selected_pid);
         }
         break;
         case 27: // esc sau alt 
@@ -587,8 +767,9 @@ void monitor_processes() {
             }
             break;
         default:
-            if(index_sbuffer < 255)
+            if(index_sbuffer < 49)
             {
+                highlight = 0;
                 search_buffer[index_sbuffer++] = ch;
                 search_buffer[index_sbuffer] = '\0';
             }

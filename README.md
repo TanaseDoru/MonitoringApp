@@ -31,5 +31,13 @@
 # 25.06.2024
 * Commits: Summary init
 * Am implementat un mod de cautare pentru procese scriind numele acestuia(momentan doar scrie dar nu face si cautarea)
-* Am afisate date in partea de sus, dar Total Cpu Usage momentan nu merge
+* Am afisate date in partea de sus
 * 
+# 26.06.2024
+* Commits: Nearly Done
+* Am facut ca search sa functioneze cum trebuie.
+* Am implementat functionalitatea de terminate process
+* Am implementat functionalitatea de Nice + si Nice -
+* Am rezolvat o problema prin care fisierele nu se inchideau, rezultand in multiple probleme prin care nu se putea executa comenzi sau deschidere fisiere 
+* Am adaugat o noua 'fereastra': In momentul in care se apasa sageata dreapta, se va afisa doar numele comenzii, precum si argumentele acestia
+* Am adaugatt functionalitatea de resize si pentru meniul de Show Specs
