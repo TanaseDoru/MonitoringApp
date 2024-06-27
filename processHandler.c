@@ -317,7 +317,7 @@ void display_processes_info(WINDOW* proc_win, int start_index, int highlight, Pr
     char buffer[BUFFER_SIZE];
     if(right_pressed)
     {
-        mvwprintw(proc_win, 1, 2, "CMD\t\t\t\tARGS");
+        mvwprintw(proc_win, 1, 2, "\t\t\tCMD\tARGS");
     }
     else
     {
@@ -495,6 +495,22 @@ void show_sorting_options(WINDOW* win, int line)
     mvwprintw(win, line, 0, "F1 Pid     F2 PPid     F3 User     F4 Nice     Esc Back");
 }
 
+void display_help()
+{
+    mvprintw(1, 2, "F2 - sort by a criteria");
+    mvprintw(2, 2, "F1, F2, F3, F4 Sort by mentioned criteria");
+    mvprintw(3, 2, "If a button is pressed 2 times it will sort in descending order");
+    mvprintw(4, 2, "If it is pressed 3 times it will make the list unsorted");
+    mvprintw(5, 2, "F3 - Make nice value decrease by 1 (must be run using sudo)");
+    mvprintw(6, 2, "F4 - Make nice value increase by 1 (sudo may be needed)");
+    mvprintw(7, 2, "F5 - Kill selected process (sudo may be needed)");
+    mvprintw(8, 2, "Commands that request sudo will not be run unless sudo");
+    mvprintw(8, 2, "Right Key - Extend menu, also show ARGS");
+    mvprintw(9, 2, "Left Key - Retract menu");
+    mvprintw(11, 2, "Press F1 to go back");
+    mvprintw(12, 2, "Press q to quit");
+}
+
 void terminate_process(pid_t pid) {
     char command[50];
     snprintf(command, sizeof(command), "kill -9 %d", pid);
@@ -597,25 +613,32 @@ void monitor_processes() {
             get_summary(top_win, &prev_cpu_times, &sumData);
         }
 
-        
         resize_windows(top_win, proc_win, options_win); //Resize deoarece in cazul in care terminalul nu era la dimensiunea corecta aparea un bug ciudat
 
         clear_refresh_windows(top_win, proc_win, options_win);
-        
-        display_processes_info(proc_win, start_index, highlight, processes, ss, search_buffer, &display_count, &selected_pid, right_pressed);
-        display_summary_top(top_win, sumData);
-        display_button_to_quit(options_win, 2);
-        display_search(options_win, search_buffer, 1);
-        switch (current_option)
+
+        if(current_option == 2)
         {
-        case 0:
-            show_tutorial_commands(options_win, 0);
-            break;
-        case 1:
-            show_sorting_options(options_win, 0);
-            break;
-        default:
-            break;
+            display_help();
+        }
+        else
+        {
+            display_processes_info(proc_win, start_index, highlight, processes, ss, search_buffer, &display_count, &selected_pid, right_pressed);
+            display_summary_top(top_win, sumData);
+            display_button_to_quit(options_win, 2);
+            display_search(options_win, search_buffer, 1);
+
+            switch (current_option)
+            {
+            case 0:
+                show_tutorial_commands(options_win, 0);
+                break;
+            case 1:
+                show_sorting_options(options_win, 0);
+                break;
+            default:
+                break;
+            }
         }
         
         wrefresh(proc_win);
@@ -672,6 +695,15 @@ void monitor_processes() {
                 ss = Pid;
                 qsort(processes, nr_processes, sizeof(Process), compare_by_pid);
             }
+        }
+        else if (current_option == 0)
+        {
+            current_option = 2;
+            display_help();
+        }
+        else if (current_option == 2)
+        {
+            current_option = 0;
         }
         break;
         case KEY_F(2):

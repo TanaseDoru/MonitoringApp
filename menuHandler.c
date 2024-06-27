@@ -6,7 +6,7 @@
 
 void display_menu(int highlight) {
     clear();
-    char *options[NUM_OPTIONS] = {"Show Specs", "Monitor Processes", "Option 3", "Option 4"};
+    char *options[NUM_OPTIONS] = {"Show Specs", "Monitor Processes"};
     for (int i = 0; i < NUM_OPTIONS; ++i) {
         if (i == highlight)
             attron(A_REVERSE);
@@ -48,10 +48,6 @@ void handle_menu()
                 } else if (choice == 1) {
                     clear();
                     monitor_processes();
-                } else if (choice == 2 || choice == 3) {
-                    clear();
-                    printw("Option %d is currently empty for further development.\n", choice + 1);
-                    getch();
                 }
                 break;
             case 'q': // Exit on 'q'

@@ -41,3 +41,8 @@
 * Am rezolvat o problema prin care fisierele nu se inchideau, rezultand in multiple probleme prin care nu se putea executa comenzi sau deschidere fisiere 
 * Am adaugat o noua 'fereastra': In momentul in care se apasa sageata dreapta, se va afisa doar numele comenzii, precum si argumentele acestia
 * Am adaugatt functionalitatea de resize si pentru meniul de Show Specs
+
+# 27.06.2024
+* Commits: Done
+* Am facut meniul de Help din Process Manager
+* Mici detalii cum ar fi spatiere
