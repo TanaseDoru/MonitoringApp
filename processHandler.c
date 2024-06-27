@@ -22,6 +22,7 @@
 #define MAX_THREADS 4
 #define BUFFER_SIZE 1024
 #define HEIGHT_OPT 8
+#define SECONDS 2
 
 int nr_processes = 0;
 
@@ -201,7 +202,7 @@ void get_process_by_pid(char* pid, Process* current_proc) {
             FILE *uptime_file = fopen("/proc/uptime", "r");
             if (uptime_file != NULL) {
                 fscanf(uptime_file, "%lf", &uptime);
-                fclose(uptime_file); // Ensure file is closed
+                fclose(uptime_file); 
             } else { 
                 uptime = sys_info.uptime;
             }
@@ -397,7 +398,7 @@ void get_cpu_times(CpuTimes* times) {
     
     char buffer[256];
     fgets(buffer, sizeof(buffer), fp);
-    fclose(fp); // Ensure file is closed
+    fclose(fp); 
 
     sscanf(buffer, "cpu %llu %llu %llu %llu %llu %llu %llu %llu\n",
         &times->user, &times->nice, &times->system, &times->idle,
@@ -607,7 +608,7 @@ void monitor_processes() {
             continue;
         }
         current_time = time(0);
-        if (difftime(current_time, timer_time) >= 2.5) {
+        if (difftime(current_time, timer_time) >= SECONDS) {
             timer_time = current_time;
             get_processes(processes);
             get_summary(top_win, &prev_cpu_times, &sumData);
@@ -671,7 +672,7 @@ void monitor_processes() {
         case KEY_LEFT:
             right_pressed = 0;
         break;
-        case 'q': // 'q' to quit
+        case 'q':
             return;
         case KEY_RESIZE:
             getmaxyx(stdscr, height, width);
